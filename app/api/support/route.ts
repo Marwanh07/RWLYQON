@@ -1,12 +1,10 @@
 import { NextResponse } from "next/server";
-import { Resend } from "resend";
 import {
   consumeFormRateLimit,
-  escapeHtml,
-  getEmailConfiguration,
   getFormText,
   isValidEmail,
   readJsonPayload,
+  submitFormToFormSubmit,
 } from "@/lib/form-submissions";
 
 export async function POST(request: Request) {
@@ -45,34 +43,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "Your problem description must be 5,000 characters or fewer." }, { status: 400 });
   }
 
-  const emailConfiguration = getEmailConfiguration();
-
-  if (!emailConfiguration) {
-    return NextResponse.json(
-      { message: "The email service is not configured. Set RESEND_API_KEY and a verified-domain RESEND_FROM_EMAIL." },
-      { status: 500 },
-    );
-  }
-
   try {
-    const resend = new Resend(emailConfiguration.apiKey);
-    const data = await resend.emails.send({
-      from: emailConfiguration.fromAddress,
-      to: ["relyqonteam@gmail.com"],
-      replyTo: email,
-      subject: "New Support Request — RELYQON",
-      html: `
-        <h2>New Support Request — RELYQON</h2>
-        <p><strong>Full Name:</strong> ${escapeHtml(name)}</p>
-        <p><strong>Email:</strong> ${escapeHtml(email)}</p>
-        <p><strong>Problem Description:</strong></p>
-        <p>${escapeHtml(problem).replace(/\n/g, "<br />")}</p>
-      `,
+    await submitFormToFormSubmit({
+      name,
+      email,
+      problem,
+      _replyto: email,
+      _subject: "New Support Request — RELYQON",
+      _template: "table",
     });
-
-    if (data.error) {
-      throw new Error(data.error.message ?? "Email delivery failed.");
-    }
 
     return NextResponse.json({ message: "Your support request was submitted successfully." }, { status: 200 });
   } catch (error) {

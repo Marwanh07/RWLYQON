@@ -1,12 +1,10 @@
 import { NextResponse } from "next/server";
-import { Resend } from "resend";
 import {
   consumeFormRateLimit,
-  escapeHtml,
-  getEmailConfiguration,
   getFormText,
   isValidEmail,
   readJsonPayload,
+  submitFormToFormSubmit,
 } from "@/lib/form-submissions";
 
 export async function POST(request: Request) {
@@ -40,33 +38,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "Your idea must be 5,000 characters or fewer." }, { status: 400 });
   }
 
-  const emailConfiguration = getEmailConfiguration();
-
-  if (!emailConfiguration) {
-    return NextResponse.json(
-      { message: "The email service is not configured. Set RESEND_API_KEY and a verified-domain RESEND_FROM_EMAIL." },
-      { status: 500 },
-    );
-  }
-
   try {
-    const resend = new Resend(emailConfiguration.apiKey);
-    const data = await resend.emails.send({
-      from: emailConfiguration.fromAddress,
-      to: ["relyqon@gmail.com"],
-      replyTo: email,
-      subject: "New Project Idea — RELYQON Website",
-      html: `
-        <h2>New Project Idea — RELYQON Website</h2>
-        <p><strong>Sender Email:</strong> ${escapeHtml(email)}</p>
-        <p><strong>Project Idea:</strong></p>
-        <p>${escapeHtml(message).replace(/\n/g, "<br />")}</p>
-      `,
+    await submitFormToFormSubmit({
+      email,
+      message,
+      _replyto: email,
+      _subject: "New Project Idea — RELYQON",
+      _template: "table",
     });
-
-    if (data.error) {
-      throw new Error(data.error.message ?? "Email delivery failed.");
-    }
 
     return NextResponse.json({ message: "Your idea has been sent successfully." }, { status: 200 });
   } catch (error) {

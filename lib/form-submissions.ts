@@ -110,30 +110,31 @@ export function isValidEmail(value: string) {
   return value.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
-export function escapeHtml(value: string) {
-  return value.replace(/[&<>"']/g, (character) => {
-    switch (character) {
-      case "&":
-        return "&amp;";
-      case "<":
-        return "&lt;";
-      case ">":
-        return "&gt;";
-      case '"':
-        return "&quot;";
-      default:
-        return "&#39;";
-    }
+export async function submitFormToFormSubmit(fields: Record<string, string>) {
+  const response = await fetch("https://formsubmit.co/ajax/relyqonteam@gmail.com", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(fields),
   });
-}
 
-export function getEmailConfiguration() {
-  const apiKey = process.env.RESEND_API_KEY?.trim();
-  const fromAddress = process.env.RESEND_FROM_EMAIL?.trim();
+  let result: unknown;
 
-  if (!apiKey || !fromAddress || !isValidEmail(fromAddress)) {
-    return null;
+  try {
+    result = await response.json();
+  } catch {
+    throw new Error(`FormSubmit returned an invalid response (HTTP ${response.status}).`);
   }
 
-  return { apiKey, fromAddress };
+  const accepted =
+    typeof result === "object" &&
+    result !== null &&
+    "success" in result &&
+    (result.success === true || result.success === "true");
+
+  if (!response.ok || !accepted) {
+    throw new Error(`FormSubmit did not accept the submission (HTTP ${response.status}).`);
+  }
 }
