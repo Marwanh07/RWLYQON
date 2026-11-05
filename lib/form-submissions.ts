@@ -110,6 +110,42 @@ export function isValidEmail(value: string) {
   return value.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
+function sanitizeFormSubmitResponse(body: string, fields: Record<string, string>) {
+  let sanitized = body
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;|&#160;/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  for (const value of Object.values(fields)) {
+    if (!value) continue;
+
+    for (const candidate of [value, encodeURIComponent(value), value.replace(/[&<>"']/g, (character) => {
+      switch (character) {
+        case "&":
+          return "&amp;";
+        case "<":
+          return "&lt;";
+        case ">":
+          return "&gt;";
+        case '"':
+          return "&quot;";
+        default:
+          return "&#39;";
+      }
+    })]) {
+      sanitized = sanitized.replaceAll(candidate, "[redacted]");
+    }
+  }
+
+  return sanitized
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[redacted email]")
+    .replace(/\b(?:\+?\d[\d\s().-]{7,}\d)\b/g, "[redacted phone]")
+    .slice(0, 1_200);
+}
+
 export async function submitFormToFormSubmit(fields: Record<string, string>) {
   const response = await fetch("https://formsubmit.co/ajax/relyqonteam@gmail.com", {
     method: "POST",
@@ -120,12 +156,13 @@ export async function submitFormToFormSubmit(fields: Record<string, string>) {
     body: JSON.stringify(fields),
   });
 
+  const responseBody = await response.text();
   let result: unknown;
 
   try {
-    result = await response.json();
+    result = JSON.parse(responseBody);
   } catch {
-    throw new Error(`FormSubmit returned an invalid response (HTTP ${response.status}).`);
+    result = null;
   }
 
   const accepted =
@@ -135,6 +172,19 @@ export async function submitFormToFormSubmit(fields: Record<string, string>) {
     (result.success === true || result.success === "true");
 
   if (!response.ok || !accepted) {
+    console.error("FormSubmit request failed", {
+      status: response.status,
+      headers: {
+        contentType: response.headers.get("content-type"),
+        server: response.headers.get("server"),
+        cfRay: response.headers.get("cf-ray"),
+        cfCacheStatus: response.headers.get("cf-cache-status"),
+        retryAfter: response.headers.get("retry-after"),
+        requestId: response.headers.get("x-request-id"),
+      },
+      body: sanitizeFormSubmitResponse(responseBody, fields),
+    });
+
     throw new Error(`FormSubmit did not accept the submission (HTTP ${response.status}).`);
   }
 }
